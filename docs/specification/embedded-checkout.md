@@ -197,6 +197,9 @@ parameters from business-specific query parameters:
 - `ec_delegate` (string, **OPTIONAL**): Comma-delimited list of delegations
     the host wants to handle. **SHOULD** be a subset of `config.delegate`
     from the embedded service binding.
+- `ec_color_scheme` (string, **OPTIONAL**): The color scheme preference for
+    the checkout UI. Valid values: `light`, `dark`. When not provided, the
+    Embedded Checkout follows system preference.
 
 #### Authentication
 
@@ -253,6 +256,38 @@ specification for available options.
 
 ```text
 ?ec_version=2026-01-11&ec_delegate=payment.instruments_change,payment.credential,fulfillment.address_change
+```
+
+#### Color Scheme
+
+The optional `ec_color_scheme` parameter allows the host to specify which color
+scheme the Embedded Checkout should use, enabling visual consistency between
+the host application and the checkout UI.
+
+**Valid Values:**
+
+| Value   | Description                                          |
+| :------ | :--------------------------------------------------- |
+| `light` | Use light color scheme (light background, dark text) |
+| `dark`  | Use dark color scheme (dark background, light text)  |
+
+**Default Behavior:**
+
+When `ec_color_scheme` is not provided, the Embedded Checkout **SHOULD**
+respect the buyer's system preference via the `prefers-color-scheme` media
+query.
+
+**Implementation Notes:**
+
+- The Embedded Checkout **SHOULD** apply the color scheme immediately upon load
+- The color scheme is a hint; businesses **MAY** ignore unsupported values
+- When no color scheme is specified, the Embedded Checkout **SHOULD** listen
+  for system preference changes and update accordingly
+
+**Example:**
+
+```text
+https://example.com/checkout/abc123?ec_version=2026-01-11&ec_color_scheme=dark
 ```
 
 #### Delegation Negotiation
