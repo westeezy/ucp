@@ -273,8 +273,8 @@ the host application and the checkout UI.
 
 **Default Behavior:**
 
-When `ec_color_scheme` is not provided, the Embedded Checkout **SHOULD**
-respect the buyer's system preference via the
+When `ec_color_scheme` is not provided, the Embedded Checkout can
+use the buyer's system preference via the
 [`prefers-color-scheme`](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme)
 media query or the
 [`Sec-CH-Prefers-Color-Scheme`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Sec-CH-Prefers-Color-Scheme)
@@ -284,9 +284,10 @@ HTTP client hint, and **SHOULD** listen for changes and update accordingly.
 
 - By default, the Embedded Checkout **SHOULD** respect the buyer's system
   color scheme preference and listen for changes to update accordingly
-- When `ec_color_scheme` is explicitly provided, it **SHOULD** override the
-  system preference and be applied immediately upon load
-- The color scheme is a hint; businesses **MAY** ignore unsupported values
+- When `ec_color_scheme` is explicitly provided, it **MUST** override the
+  system preference, be applied immediately upon load, and be enforced
+  for the duration of the session.
+- Businesses **MAY** ignore unsupported values
 
 **Example:**
 
