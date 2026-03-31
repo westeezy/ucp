@@ -28,24 +28,39 @@
       "result": {
         "name": "readyResult",
         "schema": {
-          "type": "object",
-          "description": "Handshake response from host.",
-          "properties": {
-            "upgrade": {
+          "oneOf": [
+            {
               "type": "object",
-              "description": "Channel upgrade instructions. If present, switch to provided MessagePort.",
+              "description": "Handshake response from host.",
               "properties": {
-                "port": {
+                "upgrade": {
                   "type": "object",
-                  "description": "MessagePort for upgraded channel. Runtime type is MessagePort."
+                  "description": "Channel upgrade instructions. If present, switch to provided MessagePort.",
+                  "properties": {
+                    "port": {
+                      "type": "object",
+                      "description": "MessagePort for upgraded channel. Runtime type is MessagePort."
+                    }
+                  }
+                },
+                "checkout": {
+                  "$ref": "../../schemas/shopping/checkout.json",
+                  "description": "Initial checkout state with host-provided data (saved instruments, addresses)."
                 }
               }
             },
-            "checkout": {
-              "$ref": "../../schemas/shopping/checkout.json",
-              "description": "Initial checkout state with host-provided data (saved instruments, addresses)."
+            {
+              "type": "object",
+              "description": "Delegation error.",
+              "required": ["error"],
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "$ref": "../../schemas/shopping/types/delegation_error.json"
+                }
+              }
             }
-          }
+          ]
         }
       }
     },
@@ -179,33 +194,48 @@
       "result": {
         "name": "instrumentsChangeResult",
         "schema": {
-          "type": "object",
-          "description": "Checkout state after instrument selection.",
-          "required": ["checkout"],
-          "properties": {
-            "checkout": {
+          "oneOf": [
+            {
               "type": "object",
-              "description": "Partial checkout update with payment instrument selection.",
+              "description": "Checkout state after instrument selection.",
+              "required": ["checkout"],
               "properties": {
-                "payment": {
+                "checkout": {
                   "type": "object",
+                  "description": "Partial checkout update with payment instrument selection.",
                   "properties": {
-                    "selected_instrument_id": {
-                      "type": "string",
-                      "description": "ID of the selected payment instrument."
-                    },
-                    "instruments": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "../../schemas/shopping/types/payment_instrument.json#/$defs/selected_payment_instrument"
-                      },
-                      "description": "Available payment instruments after selection."
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "selected_instrument_id": {
+                          "type": "string",
+                          "description": "ID of the selected payment instrument."
+                        },
+                        "instruments": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "../../schemas/shopping/types/payment_instrument.json#/$defs/selected_payment_instrument"
+                          },
+                          "description": "Available payment instruments after selection."
+                        }
+                      }
                     }
                   }
                 }
               }
+            },
+            {
+              "type": "object",
+              "description": "Delegation error.",
+              "required": ["error"],
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "$ref": "../../schemas/shopping/types/delegation_error.json"
+                }
+              }
             }
-          }
+          ]
         }
       }
     },
@@ -227,29 +257,151 @@
       "result": {
         "name": "credentialResult",
         "schema": {
-          "type": "object",
-          "description": "Checkout state with payment credential ready for completion.",
-          "required": ["checkout"],
-          "properties": {
-            "checkout": {
+          "oneOf": [
+            {
               "type": "object",
-              "description": "Partial checkout update with payment credential.",
+              "description": "Checkout state with payment credential ready for completion.",
+              "required": ["checkout"],
               "properties": {
-                "payment": {
+                "checkout": {
                   "type": "object",
+                  "description": "Partial checkout update with payment credential.",
                   "properties": {
-                    "instruments": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "../../schemas/shopping/types/payment_instrument.json#/$defs/selected_payment_instrument"
-                      },
-                      "description": "Payment instruments with credential populated on selected instrument."
+                    "payment": {
+                      "type": "object",
+                      "properties": {
+                        "instruments": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "../../schemas/shopping/types/payment_instrument.json#/$defs/selected_payment_instrument"
+                          },
+                          "description": "Payment instruments with credential populated on selected instrument."
+                        }
+                      }
                     }
                   }
                 }
               }
+            },
+            {
+              "type": "object",
+              "description": "Delegation error.",
+              "required": ["error"],
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "$ref": "../../schemas/shopping/types/delegation_error.json"
+                }
+              }
             }
+          ]
+        }
+      }
+    },
+
+    {
+      "name": "ec.fulfillment.change",
+      "summary": "Fulfillment details changed",
+      "description": "Merchant notifies host that checkout.fulfillment has changed (shipping method selected, delivery options updated).",
+      "params": [
+        {
+          "name": "checkout",
+          "required": true,
+          "schema": {
+            "$ref": "../../schemas/shopping/checkout.json",
+            "description": "Current checkout state with updated fulfillment."
           }
+        }
+      ]
+    },
+
+    {
+      "name": "ec.fulfillment.address_change_request",
+      "summary": "Request address change",
+      "description": "Merchant requests host to present address selection UI for a shipping fulfillment method.",
+      "params": [
+        {
+          "name": "checkout",
+          "required": true,
+          "schema": {
+            "$ref": "../../schemas/shopping/checkout.json",
+            "description": "Current checkout state with fulfillment details."
+          }
+        }
+      ],
+      "result": {
+        "name": "addressChangeResult",
+        "schema": {
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "Checkout state after address selection.",
+              "required": ["checkout"],
+              "properties": {
+                "checkout": {
+                  "type": "object",
+                  "description": "Partial checkout update with fulfillment address selection.",
+                  "properties": {
+                    "fulfillment": {
+                      "$ref": "../../schemas/shopping/types/fulfillment.json",
+                      "description": "Updated fulfillment with new selected destination and destinations."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "description": "Delegation error.",
+              "required": ["error"],
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "$ref": "../../schemas/shopping/types/delegation_error.json"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    {
+      "name": "ec.window.open_request",
+      "summary": "Request window open",
+      "description": "The buyer activated a link within checkout. The host MUST present the content to the buyer and respond with a success result, or respond with a delegation error if host policy prevented the navigation.",
+      "params": [
+        {
+          "name": "url",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uri",
+            "description": "The URL to open."
+          }
+        }
+      ],
+      "result": {
+        "name": "windowOpenResult",
+        "schema": {
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "Acknowledgement that the host handled the request.",
+              "properties": {}
+            },
+            {
+              "type": "object",
+              "description": "Delegation error.",
+              "required": ["error"],
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "$ref": "../../schemas/shopping/types/delegation_error.json"
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -278,5 +430,5 @@
       }
     }
   ],
-  "x-delegations": ["payment.instruments_change", "payment.credential", "window.open"]
+  "x-delegations": ["payment.instruments_change", "payment.credential", "fulfillment.address_change", "window.open"]
 }

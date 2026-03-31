@@ -42,15 +42,15 @@ checkout UI in an iframe/webview. Events flow bidirectionally, with optional
 delegation allowing the host to handle specific interactions natively.
 
 <!-- cSpell:ignore paymentmethodchange -->
-| Concept                   | W3C Payment Request              | Embedded Checkout                                                   |
-| :------------------------ | :------------------------------- | :------------------------------------------------------------------ |
-| **Initialization**        | `new PaymentRequest()`           | Load embedded context with `continue_url`                           |
-| **UI Ready**              | `show()` returns Promise         | `ec.start` notification                                             |
-| **Payment Method Change** | `paymentmethodchange` event      | `ec.payment.change` notification                                    |
-| **Address Change**        | `shippingaddresschange` event    | `ec.fulfillment.change` and `ec.fulfillment.address_change_request` |
-| **Submit Payment**        | User accepts → `PaymentResponse` | Delegated `ec.payment.credential_request`                           |
-| **Completion**            | `response.complete()`            | `ec.complete` notification                                          |
-| **Errors/Messages**       | Promise rejection                | `ec.messages.change` notification                                   |
+| Concept                   | W3C Payment Request              | Embedded Checkout                                                              |
+| :------------------------ | :------------------------------- | :----------------------------------------------------------------------------- |
+| **Initialization**        | `new PaymentRequest()`           | Load embedded context with `continue_url`                                      |
+| **UI Ready**              | `show()` returns Promise         | `ec.start` notification                                                        |
+| **Payment Method Change** | `paymentmethodchange` event      | `ec.payment.change` notification                                               |
+| **Address Change**        | `shippingaddresschange` event    | `ec.fulfillment.change` and `ec.fulfillment.address_change_request`            |
+| **Submit Payment**        | User accepts → `PaymentResponse` | Delegated `ec.payment.credential_request`                                      |
+| **Completion**            | `response.complete()`            | `ec.complete` notification                                                     |
+| **Errors/Messages**       | Promise rejection                | `ec.messages.change` notification; delegation errors via `result.error`        |
 
 **Key difference:** In W3C Payment Request, the browser orchestrates the payment
 flow. In Embedded Checkout, the business orchestrates within the embedded
@@ -350,7 +350,7 @@ action using its own UI.
 **Host responsibilities:**
 
 1. **MUST** respond to every `{action}_request` message it receives
-2. **MUST** respond with an appropriate error if the user cancels
+2. **MUST** respond with an appropriate error `result` if the user cancels (see [Error Codes](#error-codes))
 3. **SHOULD** show loading/processing states while handling delegation
 
 #### 3.3.3 Delegation Flow
@@ -358,8 +358,8 @@ action using its own UI.
 1. **Request**: Embedded Checkout sends an `ec.{domain}.{action}_request`
     message with current state (includes `id`)
 2. **Native UI**: Host presents native UI for the delegated action
-3. **Response**: host sends back a JSON-RPC response with matching `id` and
-    `result` or `error`
+3. **Response**: host sends back a JSON-RPC response with matching `id` and a
+    `result` (either the updated checkout state or an `error` object)
 4. **Update**: Embedded Checkout updates its state and may send subsequent
     change notifications
 
@@ -414,7 +414,7 @@ All ECP messages **MUST** use JSON-RPC 2.0 format
 - Require a response from the receiver
 - **MUST** include a unique `id` field
 - Receiver **MUST** respond with matching `id`
-- Response **MUST** be either a `result` or `error` object
+- Response **MUST** be a `result` object containing either the updated state or an `error` object
 - Used for operations requiring acknowledgment or data
 
 **Notifications** (without `id` field):
@@ -426,7 +426,11 @@ All ECP messages **MUST** use JSON-RPC 2.0 format
 
 ### Response Handling
 
-For requests (messages with `id`), receivers **MUST** respond with either:
+For requests (messages with `id`), receivers **MUST** respond with a `result`.
+Both success and error outcomes **MUST** be returned via the `result` field. The JSON-RPC
+`error` field is reserved for transport-level failures (parse errors, method not
+found, invalid params). Implementations **MUST NOT** use the JSON-RPC `error`
+field for delegation-level error codes.
 
 **Success Response:**
 
@@ -436,8 +440,22 @@ For requests (messages with `id`), receivers **MUST** respond with either:
 
 **Error Response:**
 
+Delegation errors **MUST** be returned as a `result` containing an `error` object
+with `code`, `message`, and `severity` fields. Each error response **MUST** contain
+exactly one error — delegation failures are single-cause.
+
 ```json
-{ "jsonrpc": "2.0", "id": "...", "error": {...} }
+{
+  "jsonrpc": "2.0",
+  "id": "...",
+  "result": {
+    "error": {
+      "code": "abort_error",
+      "message": "User cancelled the interaction.",
+      "severity": "recoverable"
+    }
+  }
+}
 ```
 
 ### Communication Channels
@@ -646,6 +664,25 @@ information:**
                     }
                 ]
             }
+        }
+    }
+}
+```
+
+**Example Error Response:**
+
+If the host cannot complete the handshake (e.g., origin validation failure or
+protocol state violation), it **MUST** respond with a delegation error result:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "id": "ready_1",
+    "result": {
+        "error": {
+            "code": "security_error",
+            "message": "Host origin validation failed.",
+            "severity": "unrecoverable"
         }
     }
 }
@@ -987,8 +1024,9 @@ Requests the host to present payment instrument selection UI.
 }
 ```
 
-The host **MUST** respond with either an error, or the newly-selected payment
-instruments. In successful responses, the host **MUST** respond with a partial
+The host **MUST** respond with a `result` containing either the newly-selected
+payment instruments or an `error` object (see [Error Codes](#error-codes)). In
+successful responses, the host **MUST** respond with a partial
 update to the `checkout` object, with only the `payment.instruments` field updated. The Embedded Checkout **MUST**
 treat this update as a PUT-style change by entirely replacing the existing state
 for the provided fields, rather than attempting to merge the new data with
@@ -1038,9 +1076,12 @@ existing state.
 {
     "jsonrpc": "2.0",
     "id": "payment_instruments_change_request_1",
-    "error": {
-        "code": "abort_error",
-        "message": "User closed the payment sheet without authorizing."
+    "result": {
+        "error": {
+            "code": "abort_error",
+            "message": "User closed the payment sheet without authorizing.",
+            "severity": "recoverable"
+        }
     }
 }
 ```
@@ -1081,8 +1122,9 @@ submission.
 }
 ```
 
-The host **MUST** respond with either an error, or the credential for the
-selected payment instrument. In successful responses, the host **MUST** supply a
+The host **MUST** respond with a `result` containing either the credential for
+the selected payment instrument or an `error` object (see
+[Error Codes](#error-codes)). In successful responses, the host **MUST** supply a
 partial update to the `checkout` object, updating the instrument with
 `selected: true` with the new `credentials` field. The Embedded Checkout
 **MUST** treat this update as a PUT-style change by entirely replacing the
@@ -1136,9 +1178,12 @@ new data with existing state.
 {
     "jsonrpc": "2.0",
     "id": "payment_credential_request_1",
-    "error": {
-        "code": "abort_error",
-        "message": "User closed the payment sheet without authorizing."
+    "result": {
+        "error": {
+            "code": "abort_error",
+            "message": "User closed the payment sheet without authorizing.",
+            "severity": "recoverable"
+        }
     }
 }
 ```
@@ -1262,7 +1307,8 @@ method.
 }
 ```
 
-The host **MUST** respond with either an error, or the newly-selected address.
+The host **MUST** respond with a `result` containing either the newly-selected
+address or an `error` object (see [Error Codes](#error-codes)).
 In successful responses, the host **MUST** respond with an updated
 `fulfillment.methods` object, updating the `selected_destination_id` and
 `destinations` fields for fulfillment methods, and otherwise preserving the
@@ -1311,9 +1357,12 @@ rather than attempting to merge the new data with existing state.
 {
     "jsonrpc": "2.0",
     "id": "fulfillment_address_change_request_1",
-    "error": {
-        "code": "abort_error",
-        "message": "User cancelled address selection."
+    "result": {
+        "error": {
+            "code": "abort_error",
+            "message": "User cancelled address selection.",
+            "severity": "recoverable"
+        }
     }
 }
 ```
@@ -1431,20 +1480,31 @@ Requests the host to handle a link activated by the buyer within the checkout.
 
 ### Error Codes
 
-Responses to delegation request messages from the
-embedded checkout may resolve to errors. The message responder **SHOULD** use
-error codes mapped to
-**[W3C DOMException](https://webidl.spec.whatwg.org/#idl-DOMException)** names
-where possible.
+Delegation requests may result in errors. Errors **MUST** be returned as an
+`error` object within the `result` field, containing `code`, `message`, and
+`severity` fields. Error codes are inspired by
+**[W3C DOMException](https://webidl.spec.whatwg.org/#idl-DOMException)** names.
 
-| Code                         | Description                                                                                                                                    |
-| :--------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- |
-| `abort_error`                | The user cancelled the interaction (e.g., closed the sheet).                                                                                   |
-| `security_error`             | The host origin validation failed.                                                                                                             |
-| `not_supported_error`        | The requested payment method is not supported by the host.                                                                                     |
-| `invalid_state_error`        | Handshake was attempted out of order.                                                                                                          |
-| `not_allowed_error`          | The request was missing valid User Activation (see [Prevention of Unsolicited Payment Requests](#prevention-of-unsolicited-payment-requests)). |
-| `window_open_rejected_error` | Host policy prevented the navigation. The host **MAY** notify the buyer that their request was rejected.                                       |
+| Code                         | Severity        | Description                                                                                                                                    |
+| :--------------------------- | :-------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- |
+| `abort_error`                | `recoverable`   | The user cancelled the interaction (e.g., closed the sheet).                                                                                   |
+| `security_error`             | `unrecoverable` | The host origin validation failed.                                                                                                             |
+| `not_supported_error`        | `unrecoverable` | The requested payment method is not supported by the host.                                                                                     |
+| `invalid_state_error`        | `unrecoverable` | Handshake was attempted out of order.                                                                                                          |
+| `not_allowed_error`          | `recoverable`   | The request was missing valid User Activation (see [Prevention of Unsolicited Payment Requests](#prevention-of-unsolicited-payment-requests)). |
+| `window_open_rejected_error` | `unrecoverable` | Host policy prevented the navigation. The host **MAY** notify the buyer that their request was rejected.                                       |
+
+Delegation errors **MUST** use only `recoverable` and `unrecoverable` severities. The
+`requires_buyer_input` and `requires_buyer_review` severities do not apply
+because the buyer is already present and interacting during delegation.
+
+In the delegation context, `recoverable` means the delegation may be
+re-attempted — not that the Embedded Checkout should automatically retry.
+For `abort_error`, the buyer cancelled and may choose to try again. For
+`not_allowed_error`, recovery requires a new
+[user activation](https://html.spec.whatwg.org/multipage/interaction.html#activation)
+gesture before re-attempting the delegation. `unrecoverable` errors indicate the
+delegation cannot succeed in the current session.
 
 ### Security for Web-Based Hosts
 

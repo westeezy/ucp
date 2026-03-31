@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ucp.dev/schemas/shopping/types/delegation_error.json",
+  "title": "Delegation Error",
+  "description": "Error object for embedded protocol delegation requests. Delegation errors are single-cause failures originating from the host platform.",
+  "type": "object",
+  "required": ["code", "message", "severity"],
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "$ref": "error_code.json"
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable description of the error."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["recoverable", "unrecoverable"],
+      "description": "Whether the delegation may be re-attempted. 'recoverable': the delegation can be retried (e.g., user cancelled, missing user activation). 'unrecoverable': the delegation cannot succeed in the current session."
+    }
+  }
+}
